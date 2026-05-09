@@ -46,7 +46,15 @@ export default function App() {
     
     switch (searchMode) {
       case "all":
-        promptMessage = `Cari kata: "${userText}". Tolong tampilkan indeks/hasil dari SEMUA kamus (Arab-Indo, Indo-Arab, Munawwir, Mu'jam Arab, Lisanul Arab, Al-Qur'an) secara ringkas.`;
+        promptMessage = `Cari: "${userText}". Tolong tampilkan hasil dari SEMUA kamus berikut jika ada:
+1. Arab-Indo
+2. Indo-Arab
+3. Kamus Munawwir
+4. Mu'jam Arab
+5. Lisanul Arab
+6. Al-Qur'an
+
+Sajikan secara terstruktur dan ringkas.`;
         displayMessage = `[Semua] ${userText}`;
         break;
       case "arab-indo":
@@ -90,7 +98,14 @@ export default function App() {
         })
       });
 
-      const data = await response.json();
+      let data;
+      try {
+        data = await response.json();
+      } catch (err) {
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error("Server mengembalikan respon yang tidak valid. Ini mungkin karena server timeout atau error saat mengolah data.");
+      }
       
       if (!response.ok) {
         throw new Error(data.error || "Terjadi kesalahan pada server.");

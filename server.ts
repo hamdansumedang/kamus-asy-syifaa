@@ -8,51 +8,33 @@ import Papa from "papaparse";
 const SHEET_ID = "1Iu2-VyE2aQqG1NbKNm35auQm7K_v7W3D";
 const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
 
-let cachedSystemInstruction: string | null = null;
+let kamusData: any[] = [];
 let lastCacheTime = 0;
 
-async function getSystemInstruction() {
+async function loadKamusData() {
   const now = Date.now();
-  if (cachedSystemInstruction && (now - lastCacheTime < 1000 * 60 * 60 * 12)) {
-    return cachedSystemInstruction;
+  if (kamusData.length > 0 && (now - lastCacheTime < 1000 * 60 * 60 * 12)) {
+    return kamusData;
   }
 
   console.log("Fetching kamus data from Google Sheets...");
-  const response = await fetch(CSV_URL);
-  if (!response.ok) {
-    throw new Error("Gagal mengambil data dari Google Sheets.");
+  try {
+    const response = await fetch(CSV_URL);
+    if (!response.ok) {
+      throw new Error("Gagal mengambil data dari Google Sheets.");
+    }
+    const csvText = await response.text();
+    const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    kamusData = parsed.data;
+    lastCacheTime = now;
+    console.log("Kamus data successfully fetched and cached. Count: " + kamusData.length);
+  } catch (error) {
+    console.error("Error fetching kamus data:", error);
   }
-  const csvText = await response.text();
-  const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-  const kamusString = JSON.stringify(parsed.data);
-
-  cachedSystemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah PT Rojo Bronto Lano.
-Aplikasi ini adalah Kamus Arab Indonesia, Kamus Indonesia Arab, Kamus Munawwir, Kamus Arab, Kamus Lisanul Arab, dan Kamus Al-Qur'an (pencarian ayat).
-
-Fasilitas Data yang digunakan:
-1. Menterjemahkan kata Indonesia - Arab & Arab - Indonesia.
-2. Database utama: 154.644 kosa kata.
-3. Mu'jamul Arab (kamus Arab - Arab): 29.803 mufrodat.
-4. Kamus Almufid: contoh kalimat, jama taksir, uslub (2.449 kosa kata).
-5. Kamus Al-Quran: untuk mencari potongan kata/kalimat ayat dalam Al-Qur'an.
-
-Data CSV Pangkalan Data Tambahan:
-${kamusString}
-
-Arahan Utama:
-1. JAWABLAH DENGAN SANGAT SINGKAT DAN SPESIFIK. Jangan menggunakan kalimat panjang, langsung berikan definisi atau terjemahan (dan ayat jika relavan). Khusus untuk pencarian SEMUA kamus, tampilkan hasil dari setiap kamus dalam bentuk list singkat.
-2. Penerjemahan hanya dilakukan per kata (kecuali Kamus Al-Qur'an yang bisa potongan/kalimat).
-3. Jika pengguna bertanya soal keyboard, rekomendasikan menggunakan Gboard (Google Keyboard), aktifkan Bahasa Arab pada list 'Bahasa Arab/ Arabic' di setting Gboard.
-4. Jika istilah yang dicari ada di dalam pangkalan data Anda, berikan maknanya dengan sangat ringkas.
-5. Jika istilah tidak ada di dalam data, beri tahu dengan sangat singkat bahwa kata belum ada di data.`;
-
-  lastCacheTime = now;
-  console.log("Kamus data successfully fetched and cached.");
-  return cachedSystemInstruction;
 }
 
 // Prefetch data on startup
-getSystemInstruction().catch(console.error);
+loadKamusData().catch(console.error);
 
 async function startServer() {
   const app = express();
@@ -81,7 +63,48 @@ async function startServer() {
         content: m.text
       })).filter((m: any) => m.role !== "system");
 
-      const systemInstruction = await getSystemInstruction();
+      // Pastikan data dimuat
+      await loadKamusData();
+
+      // Cari kata kunci di prompt
+      let keyword = "";
+      const quoteMatch = promptMessage.match(/"([^"]+)"/);
+      if (quoteMatch) {
+          keyword = quoteMatch[1].toLowerCase();
+      } else {
+          // Jika tidak ada quote, coba ambil kata terakhir atau seluruh pesan tanpa kata peringatan
+          keyword = promptMessage.replace(/Tolong berikan|Terjemahkan ke Indonesia|Terjemahkan ke Arab|Cari di|Tolong tampilkan|secara ringkas/ig, "").replace(/":"|"/g, "").trim().toLowerCase();
+      }
+
+      // Filter pangkalan data (RAG sederhana)
+      let relevantData: any[] = [];
+      if (keyword) {
+          relevantData = kamusData.filter(row => {
+             const rowStr = JSON.stringify(row).toLowerCase();
+             return rowStr.includes(keyword);
+          }).slice(0, 30); // Batasi 30 entri agar tidak melebihi token limit
+      }
+
+      const systemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah.
+Aplikasi ini adalah himpunan pangkalan data bahasa Arab yang meliputi:
+1. Kamus Arab Indonesia
+2. Kamus Indonesia Arab
+3. Kamus Munawwir
+4. Kamus Arab (Mu'jamul Arab)
+5. Kamus Lisanul Arab
+6. Kamus Al-Qur'an (pencarian ayat)
+
+Berdasarkan pencarian kata: "${keyword}"
+
+Data Terkait dari Pangkalan (jika tersedia):
+${JSON.stringify(relevantData)}
+
+Arahan Utama:
+1. JAWABLAH DENGAN SANGAT SINGKAT DAN SPESIFIK. Jangan bertele-tele.
+2. Jika pengguna memilih "[Semua]" atau meminta dari semua kamus, WAJIB menampilkan rincian makna dari KEENAM kamus tersebut. Gunakan struktur bullet/nomor untuk tiap kamusnya (misal: "• Kamus Munawwir: ..."). Jika di salah satu kamus tidak ditemukan atau Anda tidak tahu, tulis "Tidak ditemukan" pada kamus tersebut.
+3. Penerjemahan hanya dilakukan per kata (kecuali Kamus Al-Qur'an yang bisa potongan kalimat).
+4. Jika istilah tidak ada di pangkalan data di atas, silakan gunakan pangkalan pengetahuan bahasa Arab Anda sendiri untuk menjelaskannya ke dalam format kamus-kamus tersebut.
+5. Rekomendasi keyboard Arab: Gboard (Google Keyboard), pilih 'Bahasa Arab' di pengaturan.`;
 
       const response = await openai.chat.completions.create({
         model: "openai/gpt-4o-mini",
