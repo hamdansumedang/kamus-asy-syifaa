@@ -70,12 +70,18 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+
     async function initializeAgent() {
       try {
         setIsLoading(true);
         setError(null);
         
-        const ai = new GoogleGenAI({ apiKey: "AIzaSyCTuirIbWaNe-gDTBwrYVVELjvCZGJ60aE" });
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+          throw new Error("API Key sistem tidak tersedia.");
+        }
+        
+        const ai = new GoogleGenAI({ apiKey });
 
         const csvText = await fetchWithCache(CSV_URL);
         const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
@@ -108,7 +114,7 @@ Arahan:
         ]);
       } catch (err: any) {
         console.error("Initialization Error:", err);
-        setError(err.message || "Terjadi kesalahan saat memuat data atau API Key tidak valid.");
+        setError(err.message || "Terjadi kesalahan saat memuat data.");
         setIsLoading(false);
       }
     }
@@ -219,13 +225,15 @@ Arahan:
               </div>
             </div>
             
-            <button 
-              onClick={logout}
-              className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-primary-100 hover:text-white"
-              title="Keluar (Logout)"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={logout}
+                className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-primary-100 hover:text-white"
+                title="Keluar (Logout)"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </header>
 
