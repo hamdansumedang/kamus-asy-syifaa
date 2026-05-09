@@ -144,30 +144,33 @@ Arahan:
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 selection:bg-primary-200">
-      <div className="w-full max-w-3xl bg-white shadow-xl shadow-primary-900/5 rounded-[32px] overflow-hidden flex flex-col h-[90vh] border border-primary-100">
+    <div className="min-h-screen h-screen bg-slate-50 flex flex-col selection:bg-primary-200">
+      <div className="w-full h-full bg-white flex flex-col overflow-hidden">
         
         {/* Header */}
-        <header className="px-8 py-6 bg-primary-900 text-white flex justify-between items-center shrink-0 shadow-sm relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center shrink-0 border border-white/20">
-              <BookOpen className="w-6 h-6 text-primary-50" strokeWidth={1.5} />
-            </div>
-            <div>
-              <h1 className="font-arabic text-2xl md:text-3xl font-bold tracking-wide">Kamus Asy-Syifaa</h1>
-              <p className="font-sans text-sm text-primary-200 tracking-wide opacity-90 mt-0.5">
-                Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah
-              </p>
-              <p className="font-sans text-xs text-primary-300 tracking-wide opacity-75 mt-0.5">
-                Dikembangkan oleh PT Rojo Bronto Lano
-              </p>
+        <header className="px-5 py-6 md:px-8 bg-primary-900 text-white flex justify-center items-center shrink-0 shadow-sm relative z-10">
+          <div className="w-full max-w-4xl flex justify-between items-center">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center shrink-0 border border-white/20">
+                <BookOpen className="w-6 h-6 text-primary-50" strokeWidth={1.5} />
+              </div>
+              <div>
+                <h1 className="font-arabic text-2xl md:text-3xl font-bold tracking-wide">Kamus Asy-Syifaa</h1>
+                <p className="font-sans text-sm text-primary-200 tracking-wide opacity-90 mt-0.5">
+                  Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah
+                </p>
+                <p className="font-sans text-xs text-primary-300 tracking-wide opacity-75 mt-0.5">
+                  Dikembangkan oleh PT Rojo Bronto Lano
+                </p>
+              </div>
             </div>
           </div>
         </header>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto px-4 py-8 md:px-8 space-y-6 relative bg-slate-50/30">
-          {isLoading ? (
+        <div className="flex-1 overflow-y-auto px-4 py-8 md:px-8 relative bg-slate-50/30 flex justify-center">
+          <div className="w-full max-w-4xl space-y-6">
+            {isLoading ? (
             <div className="flex flex-col items-center justify-center h-full text-primary-600 space-y-4">
               <Loader2 className="w-8 h-8 animate-spin" />
               <p className="font-sans font-medium tracking-wide animate-pulse">Mengunduh data pangkalan kamus...</p>
@@ -224,6 +227,7 @@ Arahan:
               <div ref={messagesEndRef} />
             </>
           )}
+          </div>
         </div>
 
         {/* Input Area */}
