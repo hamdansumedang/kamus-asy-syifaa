@@ -1,8 +1,10 @@
 import { Chat, GoogleGenAI } from "@google/genai";
-import { BookOpen, Loader2, Send, AlertCircle } from "lucide-react";
+import { BookOpen, Loader2, Send, AlertCircle, LogIn, LogOut } from "lucide-react";
 import Papa from "papaparse";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { onAuthStateChanged, User } from "firebase/auth";
+import { auth, loginWithGoogle, logout } from "./firebase";
 
 type Message = {
   role: "user" | "model" | "system";
@@ -39,6 +41,8 @@ const fetchWithCache = async (url: string) => {
 };
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [searchMode, setSearchMode] = useState<"umum" | "terjemahan" | "definisi" | "makna">("umum");
@@ -53,10 +57,19 @@ export default function App() {
   };
 
   useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthChecking(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
 
   useEffect(() => {
+    if (!user) return;
     async function initializeAgent() {
       try {
         setIsLoading(true);
@@ -101,7 +114,7 @@ Arahan:
     }
 
     initializeAgent();
-  }, []);
+  }, [user]);
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -143,6 +156,47 @@ Arahan:
     }
   };
 
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 selection:bg-primary-200">
+        <div className="w-full max-w-md bg-white shadow-xl shadow-primary-900/5 rounded-3xl overflow-hidden flex flex-col border border-primary-100">
+          <div className="px-8 py-10 flex flex-col items-center text-center bg-primary-900 text-white relative overflow-hidden">
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
+            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 border border-white/20 relative z-10">
+              <BookOpen className="w-8 h-8 text-primary-50" strokeWidth={1.5} />
+            </div>
+            <h1 className="font-arabic text-3xl font-bold tracking-wide relative z-10 mb-2">Kamus Asy-Syifaa</h1>
+            <p className="font-sans text-sm text-primary-200 tracking-wide opacity-90 relative z-10">
+              Silahkan Masuk Untuk Melanjutkan
+            </p>
+          </div>
+          
+          <div className="p-8 pb-10 flex flex-col items-center">
+            <p className="text-sm text-slate-600 leading-relaxed font-sans text-center mb-8">
+              Aplikasi ini terhubung langsung dengan Pangkalan Data Pesantren dan memerlukan otentikasi Google (akun Gemini).
+            </p>
+            
+            <button
+              onClick={loginWithGoogle}
+              className="w-full py-3.5 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-medium shadow-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-3"
+            >
+              <LogIn className="w-5 h-5 text-primary-600" />
+              Lanjutkan dengan Google
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen h-screen bg-slate-50 flex flex-col selection:bg-primary-200">
       <div className="w-full h-full bg-white flex flex-col overflow-hidden">
@@ -164,6 +218,14 @@ Arahan:
                 </p>
               </div>
             </div>
+            
+            <button 
+              onClick={logout}
+              className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-primary-100 hover:text-white"
+              title="Keluar (Logout)"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 

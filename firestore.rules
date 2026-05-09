@@ -1,0 +1,29 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAny(['geminiApiKey', 'updatedAt']) 
+             && (!('geminiApiKey' in data) || (data.geminiApiKey is string && data.geminiApiKey.size() <= 1024))
+             && ('updatedAt' in data && data.updatedAt == request.time);
+    }
+    
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    match /users/{userId}/private/info {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+                    && isValidUserPrivateInfo(incoming());
+      allow update: if isOwner(userId)
+                    && isValidUserPrivateInfo(incoming())
+                    && incoming().diff(existing()).affectedKeys().hasOnly(['geminiApiKey', 'updatedAt']);
+      allow delete: if isOwner(userId);
+    }
+  }
+}

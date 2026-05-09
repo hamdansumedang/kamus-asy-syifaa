@@ -1,0 +1,26 @@
+{
+  "entities": {
+    "UserPrivateInfo": {
+      "title": "User Private Info",
+      "description": "Stores private user information like API keys.",
+      "type": "object",
+      "properties": {
+        "geminiApiKey": {
+          "type": "string",
+          "description": "User's Gemini API Key"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": ["updatedAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/private/info": {
+      "schema": "UserPrivateInfo",
+      "description": "Private settings for the user, only readable by themselves."
+    }
+  }
+}
