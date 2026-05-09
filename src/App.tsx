@@ -87,7 +87,8 @@ Sajikan secara terstruktur dan ringkas.`;
     setIsTyping(true);
 
     try {
-      const response = await fetch("/api/chat", {
+      console.log("Sending request to ./api/chat...");
+      const response = await fetch("./api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
@@ -100,11 +101,13 @@ Sajikan secara terstruktur dan ringkas.`;
 
       let data;
       const textResponse = await response.text();
+      console.log("Received response text:", textResponse.substring(0, 100));
+
       try {
         data = JSON.parse(textResponse);
       } catch (err) {
-        console.error("Non-JSON response:", textResponse);
-        throw new Error("Server mengembalikan respon yang tidak valid. Ini mungkin karena server timeout atau error saat mengolah data.");
+        console.error("JSON Parse Error:", err, "Response was:", textResponse);
+        throw new Error("Respon server tidak valid (bukan JSON). Jika ini terjadi di Shared App, pastikan server backend berjalan dengan benar.");
       }
       
       if (!response.ok) {
