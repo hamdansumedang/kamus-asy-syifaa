@@ -1,119 +1,122 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import OpenAI from "openai";
 import path from "path";
-import fs from "fs";
 import Papa from "papaparse";
 
 const SHEET_ID = "1Iu2-VyE2aQqG1NbKNm35auQm7K_v7W3D";
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
+const TABLE_NAMES = [
+  "almufid",
+  "arab_indo",
+  "arab_indo2",
+  "arabic_arabic2",
+  "ghoribulquran",
+  "mujamul_ghoni",
+  "mujamul_muashiroh",
+  "quran"
+];
 
-let cachedSystemInstruction: string | null = null;
-let lastCacheTime = 0;
-let fetchInProgress: Promise<string> | null = null;
-
-async function getSystemInstruction(): Promise<string> {
-  const now = Date.now();
-  if (cachedSystemInstruction && (now - lastCacheTime < 1000 * 60 * 60 * 12)) {
-    return cachedSystemInstruction;
-  }
-
-  if (fetchInProgress) {
-    return fetchInProgress;
-  }
-
-  fetchInProgress = (async () => {
-    try {
-      console.log("Fetching kamus data from Google Sheets...");
-      const response = await fetch(CSV_URL);
-      if (!response.ok) {
-        throw new Error(`Gagal mengambil data dari Google Sheets: ${response.status} ${response.statusText}`);
-      }
-      const csvText = await response.text();
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-      const kamusString = JSON.stringify(parsed.data);
-
-      cachedSystemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah PT Rojo Bronto Lano.
-Aplikasi ini menyediakan akses ke berbagai pangkalan data kamus:
-1. Kamus Arab - Indonesia & Indonesia - Arab (Database Utama): 154.644 kosa kata.
-2. Mu'jamul Arab (Kamus Arab - Arab): 29.803 mufrodat.
-3. Kamus Almufid: Contoh kalimat, jama taksir, uslub (8.860 kosa kata).
-4. Kamus Al-Qur'an & Ghoribul Qur'an: Pencarian ayat dan maknanya (6.236 & 6.111 entri).
-5. Kamus Munawwir & Kamus Lisanul Arab.
-6. Mu'jamul Ghoni & Mu'jamul Mu'ashiroh.
-
-Data CSV Pangkalan Data (Informasi Struktur):
-${kamusString}
-
-Arahan Utama:
-1. JAWABLAH DENGAN SPESIFIK DAN INFORMATIF. Jika pengguna mencari di tab "Semua", berikan hasil dari SEMUA sumber yang relevan (misal sebutkan arti di Kamus Arab-Indo DAN berikan ayat relevan dari Al-Qur'an jika ada).
-2. Tuliskan nama kamus sumber di awal atau akhir jawaban jika hasil tersebut spesifik diambil dari pangkalan data tertentu.
-3. Gunakan Bahasa Indonesia yang baik dan benar.
-4. Jika istilah yang dicari ada di dalam pangkalan data, berikan maknanya secara lengkap namun tetap ringkas.
-5. Jika istilah tidak ditemukan, beri tahu dengan sopan bahwa kata tersebut belum ada di database kamus kami.
-6. Rekomendasi Gboard: Jika pengguna kesulitan input Arab, sarankan Gboard (Google Keyboard) dengan mengaktifkan bahasa Arab.`;
-
-      lastCacheTime = Date.now();
-      console.log("Kamus data successfully fetched and cached.");
-      return cachedSystemInstruction;
-    } catch (error) {
-      console.error("Fetch error:", error);
-      throw error;
-    } finally {
-      fetchInProgress = null;
-    }
-  })();
-
-  return fetchInProgress;
+interface KamusEntry {
+  source: string;
+  arab?: string;
+  indonesia?: string;
+  word?: string;
+  meaning?: string;
+  arabic_word?: string;
+  arabic_meanings?: string;
+  [key: string]: any;
 }
 
-// Prefetch data on startup
-getSystemInstruction().catch(console.error);
+let kamusData: KamusEntry[] = [];
+let isLoaded = false;
+let isLoading = false;
+
+async function loadKamusData() {
+  if (isLoaded || isLoading) return;
+  isLoading = true;
+  console.log("Starting to load all kamus data...");
+  const tempKamus: KamusEntry[] = [];
+  
+  for (const tableName of TABLE_NAMES) {
+    try {
+      console.log(`Fetching sheet: ${tableName}`);
+      const response = await fetch(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${tableName}`);
+      if (!response.ok) throw new Error(`Failed to fetch ${tableName}`);
+      
+      const csvText = await response.text();
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      
+      const entries = parsed.data.map((row: any) => ({
+        ...row,
+        source: tableName
+      }));
+      
+      tempKamus.push(...entries);
+      console.log(`Loaded ${entries.length} entries from ${tableName}`);
+    } catch (error) {
+      console.error(`Error loading sheet ${tableName}:`, error);
+    }
+  }
+  
+  kamusData = tempKamus;
+  isLoaded = true;
+  isLoading = false;
+  console.log(`Kamus data fully loaded. Total entries: ${kamusData.length}`);
+}
+
+// Prefetch data
+loadKamusData().catch(console.error);
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "50mb" }));
 
-  // AI Endpoint
-  app.post("/api/chat", async (req, res) => {
-    try {
-      const { messages, promptMessage } = req.body;
+  // Search API
+  app.get("/api/search", (req, res) => {
+    const { q, mode } = req.query;
+    if (!q) return res.status(400).json({ error: "Query parameter 'q' is required" });
+    
+    if (!isLoaded && !isLoading) loadKamusData();
 
-      const openrouterApiKey = process.env.OPENROUTER_API_KEY || "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";
+    const query = String(q).toLowerCase();
+    const limit = 30; // Increased limit for better results
+    
+    let filtered = kamusData;
+    if (mode && mode !== "all") {
+      const sourceMap: Record<string, string[]> = {
+        "arab-indo": ["arab_indo", "arab_indo2", "almufid"],
+        "indo-arab": ["arab_indo", "arab_indo2", "almufid"],
+        "munawwir": ["arab_indo", "arab_indo2"],
+        "arab-arab": ["arabic_arabic2", "mujamul_ghoni"],
+        "lisanul-arab": ["mujamul_ghoni", "mujamul_muashiroh"],
+        "quran": ["quran", "ghoribulquran"],
+        "almufid": ["almufid"]
+      };
       
-      const openai = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: openrouterApiKey,
-        defaultHeaders: {
-          'HTTP-Referer': process.env.APP_URL || 'http://localhost:3000',
-          'X-OpenRouter-Title': 'Kamus Asy-Syifaa',
-        },
-      });
-      
-      const chatHistory = messages.map((m: any) => ({
-        role: m.role === "model" ? "assistant" : m.role === "system" ? "system" : "user",
-        content: m.text
-      })).filter((m: any) => m.role !== "system");
-
-      const systemInstruction = await getSystemInstruction();
-
-      const response = await openai.chat.completions.create({
-        model: "openai/gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemInstruction },
-          ...chatHistory,
-          { role: "user", content: promptMessage }
-        ],
-      });
-      
-      res.json({ text: response.choices[0]?.message?.content || "" });
-      
-    } catch (error: any) {
-      console.error("AI Error:", error);
-      res.status(500).json({ error: error.message || "Terjadi kesalahan saat memproses pesan." });
+      const allowedSources = sourceMap[mode as string] || [];
+      if (allowedSources.length > 0) {
+        filtered = kamusData.filter(item => allowedSources.includes(item.source));
+      }
     }
+
+    const results = filtered.filter(item => {
+      const searchFields = [
+        item.arab, item.indonesia, item.word, item.meaning, 
+        item.arabic_word, item.arabic_meanings, item.arabic_root,
+        item.noharokah, item.dasar
+      ];
+      return searchFields.some(field => 
+        field && String(field).toLowerCase().includes(query)
+      );
+    }).slice(0, limit);
+
+    res.json({ results, isLoaded, total: filtered.length });
+  });
+
+  // Health check
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", entries: kamusData.length, isLoaded });
   });
 
   // Vite middleware for development
@@ -124,7 +127,6 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    // Production static file serving
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
