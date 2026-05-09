@@ -1,0 +1,12 @@
+{
+  "appId": "com.asy_syifaa.kamus",
+  "appName": "Kamus Asy-Syifaa",
+  "webDir": "www",
+  "server": {
+    "url": "https://kamus.asy-syifaa.com",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}
