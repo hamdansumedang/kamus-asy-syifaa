@@ -10,23 +10,30 @@ const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?forma
 
 let cachedSystemInstruction: string | null = null;
 let lastCacheTime = 0;
+let fetchInProgress: Promise<string> | null = null;
 
-async function getSystemInstruction() {
+async function getSystemInstruction(): Promise<string> {
   const now = Date.now();
   if (cachedSystemInstruction && (now - lastCacheTime < 1000 * 60 * 60 * 12)) {
     return cachedSystemInstruction;
   }
 
-  console.log("Fetching kamus data from Google Sheets...");
-  const response = await fetch(CSV_URL);
-  if (!response.ok) {
-    throw new Error("Gagal mengambil data dari Google Sheets.");
+  if (fetchInProgress) {
+    return fetchInProgress;
   }
-  const csvText = await response.text();
-  const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-  const kamusString = JSON.stringify(parsed.data);
 
-  cachedSystemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah PT Rojo Bronto Lano.
+  fetchInProgress = (async () => {
+    try {
+      console.log("Fetching kamus data from Google Sheets...");
+      const response = await fetch(CSV_URL);
+      if (!response.ok) {
+        throw new Error(`Gagal mengambil data dari Google Sheets: ${response.status} ${response.statusText}`);
+      }
+      const csvText = await response.text();
+      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      const kamusString = JSON.stringify(parsed.data);
+
+      cachedSystemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah PT Rojo Bronto Lano.
 Aplikasi ini menyediakan akses ke berbagai pangkalan data kamus:
 1. Kamus Arab - Indonesia & Indonesia - Arab (Database Utama): 154.644 kosa kata.
 2. Mu'jamul Arab (Kamus Arab - Arab): 29.803 mufrodat.
@@ -46,9 +53,18 @@ Arahan Utama:
 5. Jika istilah tidak ditemukan, beri tahu dengan sopan bahwa kata tersebut belum ada di database kamus kami.
 6. Rekomendasi Gboard: Jika pengguna kesulitan input Arab, sarankan Gboard (Google Keyboard) dengan mengaktifkan bahasa Arab.`;
 
-  lastCacheTime = now;
-  console.log("Kamus data successfully fetched and cached.");
-  return cachedSystemInstruction;
+      lastCacheTime = Date.now();
+      console.log("Kamus data successfully fetched and cached.");
+      return cachedSystemInstruction;
+    } catch (error) {
+      console.error("Fetch error:", error);
+      throw error;
+    } finally {
+      fetchInProgress = null;
+    }
+  })();
+
+  return fetchInProgress;
 }
 
 // Prefetch data on startup

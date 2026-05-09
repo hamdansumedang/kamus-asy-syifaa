@@ -94,7 +94,13 @@ export default function App() {
         })
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data: any;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        data = { error: "Format respons dari server tidak valid." };
+      }
       
       if (!response.ok) {
         throw new Error(data.error || "Terjadi kesalahan pada server.");
