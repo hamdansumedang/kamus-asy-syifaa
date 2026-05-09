@@ -1,5 +1,6 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import path from "path";
 import Papa from "papaparse";
 
@@ -74,6 +75,68 @@ async function startServer() {
     } catch (error: any) {
       console.error("Search Error:", error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // AI Chat Endpoint (Server-side)
+  app.post("/api/chat", async (req, res) => {
+    try {
+      const { messages, promptMessage, userText } = req.body;
+
+      if (!process.env.GEMINI_API_KEY) {
+        throw new Error("GEMINI_API_KEY is not set in the server environment.");
+      }
+
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      if (!kamusData.length && !isDataLoading) {
+        loadKamusData().catch(console.error);
+      }
+
+      // RAG
+      let matches: any[] = [];
+      const cleanKeyword = (userText || "").replace(/["']/g, "").toLowerCase().trim();
+      
+      if (cleanKeyword.length > 1) {
+        for (const row of kamusData) {
+          const rowStr = JSON.stringify(row).toLowerCase();
+          if (rowStr.includes(cleanKeyword)) {
+             matches.push(row);
+             if (matches.length >= 25) break;
+          }
+        }
+      }
+
+      const systemInstruction = `Anda adalah AI Kamus Asy-Syifaa untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah.
+Tugas Anda adalah membantu pengguna menerjemahkan atau mencari makna kata Arab-Indonesia.
+
+Pangkalan Data Terkait (Kata Kunci: ${cleanKeyword}):
+${JSON.stringify(matches)}
+
+Arahan:
+1. JAWABLAH DENGAN SANGAT SINGKAT. Langsung ke inti terjemahan atau makna.
+2. Gunakan data pangkalan di atas jika tersedia. Jika tidak ada data yang cocok, gunakan pengetahuan luas Anda tentang bahasa Arab.
+3. Selalu ramah dan sampaikan pesan dalam bahasa Indonesia yang natural.`;
+
+      const chat = model.startChat({
+        history: messages.map((m: any) => ({
+          role: m.role === "model" ? "model" : "user",
+          parts: [{ text: m.role === "user" ? m.text : m.text }],
+        })).slice(-10),
+      });
+
+      const result = await chat.sendMessage([
+        { text: `Sistem Instruksi: ${systemInstruction}` },
+        { text: promptMessage }
+      ]);
+      
+      const response = await result.response;
+      res.json({ text: response.text() });
+      
+    } catch (error: any) {
+      console.error("AI Chat Error:", error);
+      res.status(500).json({ error: error.message || "Terjadi kesalahan pada AI." });
     }
   });
 

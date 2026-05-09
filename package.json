@@ -1,28 +1,24 @@
 {
-  "name": "react-example",
-  "private": true,
-  "version": "0.0.0",
+  "name": "kamus-asy-syifaa",
+  "version": "1.0.0",
+  "description": "AI Agent untuk mencari makna kata, menerjemahkan, dan memberikan penjelasan berdasarkan pangkalan data Kamus Asy-Syifaa Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah.",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build",
+    "build": "tsc && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
     "@google/generative-ai": "^0.24.1",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
-    "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase": "^12.13.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
-    "openai": "^6.37.0",
     "papaparse": "^5.5.3",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
@@ -31,13 +27,13 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@firebase/eslint-plugin-security-rules": "^0.0.2",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "@types/papaparse": "^5.5.2",
+    "@types/react": "^19.0.1",
+    "@types/react-dom": "^19.0.1",
     "autoprefixer": "^10.4.21",
     "tailwindcss": "^4.1.14",
-    "typescript": "~5.8.2",
-    "vite": "^6.2.3"
+    "typescript": "~5.8.2"
   }
 }
