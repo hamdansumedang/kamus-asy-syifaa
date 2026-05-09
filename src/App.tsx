@@ -99,11 +99,11 @@ Sajikan secara terstruktur dan ringkas.`;
       });
 
       let data;
+      const textResponse = await response.text();
       try {
-        data = await response.json();
+        data = JSON.parse(textResponse);
       } catch (err) {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
+        console.error("Non-JSON response:", textResponse);
         throw new Error("Server mengembalikan respon yang tidak valid. Ini mungkin karena server timeout atau error saat mengolah data.");
       }
       
