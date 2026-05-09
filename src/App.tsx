@@ -1,55 +1,20 @@
-import { Chat, GoogleGenAI } from "@google/genai";
-import { BookOpen, Loader2, Send, AlertCircle, LogIn, LogOut } from "lucide-react";
-import Papa from "papaparse";
+import { BookOpen, Loader2, Send, AlertCircle } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { onAuthStateChanged, User } from "firebase/auth";
-import { auth, loginWithGoogle, logout } from "./firebase";
 
 type Message = {
   role: "user" | "model" | "system";
   text: string;
 };
 
-const SHEET_ID = "1Iu2-VyE2aQqG1NbKNm35auQm7K_v7W3D";
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv`;
-
-const fetchWithCache = async (url: string) => {
-  const CACHE_KEY = "kamus_csv_data";
-  const CACHE_TIME = "kamus_csv_time";
-  const now = Date.now();
-  const cached = localStorage.getItem(CACHE_KEY);
-  const time = localStorage.getItem(CACHE_TIME);
-
-  if (cached && time && now - parseInt(time) < 1000 * 60 * 60 * 12) {
-    // Fetch in background to keep data fresh on next reload
-    fetch(url).then(res => res.text()).then(text => {
-      localStorage.setItem(CACHE_KEY, text);
-      localStorage.setItem(CACHE_TIME, Date.now().toString());
-    }).catch(() => {});
-    return cached;
-  }
-
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error("Gagal mengambil data dari Google Sheets. Pastikan akses link terbuka untuk umum.");
-  }
-  const text = await response.text();
-  localStorage.setItem(CACHE_KEY, text);
-  localStorage.setItem(CACHE_TIME, Date.now().toString());
-  return text;
-};
-
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [authChecking, setAuthChecking] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [searchMode, setSearchMode] = useState<"umum" | "terjemahan" | "definisi" | "makna">("umum");
-  const [isLoading, setIsLoading] = useState(true);
+  const [searchMode, setSearchMode] = useState<"all" | "arab-indo" | "indo-arab" | "munawwir" | "arab-arab" | "lisanul-arab" | "quran">("all");
+  const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const chatRef = useRef<Chat | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -57,74 +22,21 @@ export default function App() {
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setAuthChecking(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  useEffect(() => {
     scrollToBottom();
   }, [messages, isTyping]);
 
   useEffect(() => {
-    if (!user) return;
-
-    async function initializeAgent() {
-      try {
-        setIsLoading(true);
-        setError(null);
-        
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-          throw new Error("API Key sistem tidak tersedia.");
-        }
-        
-        const ai = new GoogleGenAI({ apiKey });
-
-        const csvText = await fetchWithCache(CSV_URL);
-        const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-        const kamusString = JSON.stringify(parsed.data);
-
-        const systemInstruction = `Anda adalah AI Agent "Kamus Asy-Syifaa" untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah PT Rojo Bronto Lano.
-Tugas utama Anda adalah membantu pengguna mencari makna kata, menerjemahkan, dan memberikan penjelasan berdasarkan data referensi berikut:
-${kamusString}
-
-Arahan:
-1. JAWABLAH DENGAN SINGKAT DAN PADAT. Fokus langsung pada inti data dari kamus.
-2. Gunakan bahasa percakapan secukupnya saja hanya sebagai pemanis agar terdengar natural, jangan bertele-tele.
-3. Jika istilah yang dicari ada di dalam data, berikan maknanya dengan jelas dan ringkas.
-4. Jika istilah tidak ada di dalam data, beri tahu dengan sopan dan singkat bahwa istilah tersebut belum ada di pangkalan data saat ini.`;
-
-        const chat = ai.chats.create({
-          model: "gemini-3-flash-preview",
-          config: {
-            systemInstruction,
-          },
-        });
-
-        chatRef.current = chat;
-        setIsLoading(false);
-        setMessages([
-          {
-            role: "model",
-            text: "Assalamu'alaikum. Selamat datang di Kamus Asy-Syifaa.\n\nSaya adalah asisten AI yang siap membantu Anda mencari makna istilah dalam pangkalan data Pesantren Asy-Syifaa Wal Mahmuudiyyah. Apa yang ingin Anda cari hari ini?",
-          },
-        ]);
-      } catch (err: any) {
-        console.error("Initialization Error:", err);
-        setError(err.message || "Terjadi kesalahan saat memuat data.");
-        setIsLoading(false);
-      }
-    }
-
-    initializeAgent();
-  }, [user]);
+    setMessages([
+      {
+        role: "model",
+        text: "Assalamu'alaikum. Selamat datang di Kamus Asy-Syifaa.\n\nSaya adalah asisten AI yang siap membantu Anda mencari makna istilah dalam pangkalan data Pesantren Asy-Syifaa Wal Mahmuudiyyah. Apa yang ingin Anda cari hari ini?",
+      },
+    ]);
+  }, []);
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || !chatRef.current || isTyping) return;
+    if (!input.trim() || isTyping) return;
 
     const userText = input.trim();
     setInput("");
@@ -132,23 +44,64 @@ Arahan:
     let displayMessage = userText;
     let promptMessage = userText;
     
-    if (searchMode !== "umum") {
-      const modeText = searchMode.charAt(0).toUpperCase() + searchMode.slice(1);
-      displayMessage = `[${modeText}] ${userText}`;
-      promptMessage = `Tolong berikan ${searchMode} dari kata/istilah berikut: "${userText}"`;
+    switch (searchMode) {
+      case "all":
+        promptMessage = `Cari kata: "${userText}". Tolong tampilkan indeks/hasil dari SEMUA kamus (Arab-Indo, Indo-Arab, Munawwir, Mu'jam Arab, Lisanul Arab, Al-Qur'an) secara ringkas.`;
+        displayMessage = `[Semua] ${userText}`;
+        break;
+      case "arab-indo":
+        promptMessage = `Terjemahkan ke Indonesia: "${userText}"`;
+        displayMessage = `[Arab - Indo] ${userText}`;
+        break;
+      case "indo-arab":
+        promptMessage = `Terjemahkan ke Arab: "${userText}"`;
+        displayMessage = `[Indo - Arab] ${userText}`;
+        break;
+      case "munawwir":
+        promptMessage = `Cari di Kamus Munawwir: "${userText}"`;
+        displayMessage = `[Kamus Munawwir] ${userText}`;
+        break;
+      case "arab-arab":
+        promptMessage = `Cari di Mu'jam Arab: "${userText}"`;
+        displayMessage = `[Mu'jam Arab] ${userText}`;
+        break;
+      case "lisanul-arab":
+        promptMessage = `Cari di Kamus Lisanul Arab: "${userText}"`;
+        displayMessage = `[Lisanul Arab] ${userText}`;
+        break;
+      case "quran":
+        promptMessage = `Cari ayat Al-Qur'an terkait: "${userText}"`;
+        displayMessage = `[Al-Qur'an] ${userText}`;
+        break;
     }
 
     setMessages((prev) => [...prev, { role: "user", text: displayMessage }]);
     setIsTyping(true);
 
     try {
-      const result = await chatRef.current.sendMessage({ message: promptMessage });
-      setMessages((prev) => [...prev, { role: "model", text: result.text || "" }]);
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          messages: messages.filter(m => m.role !== "system"),
+          promptMessage
+        })
+      });
+
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || "Terjadi kesalahan pada server.");
+      }
+      
+      setMessages((prev) => [...prev, { role: "model", text: data.text || "" }]);
     } catch (err: any) {
       console.error("Chat Error:", err);
       setMessages((prev) => [
         ...prev,
-        { role: "system", text: "Maaf, terjadi kesalahan saat mencoba menjawab pertanyaan Anda." },
+        { role: "system", text: `Maaf, terjadi kesalahan: ${err.message || "Gagal menghubungi server."}` },
       ]);
     } finally {
       setIsTyping(false);
@@ -161,47 +114,6 @@ Arahan:
       handleSend();
     }
   };
-
-  if (authChecking) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-        <Loader2 className="w-8 h-8 text-primary-600 animate-spin" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 selection:bg-primary-200">
-        <div className="w-full max-w-md bg-white shadow-xl shadow-primary-900/5 rounded-3xl overflow-hidden flex flex-col border border-primary-100">
-          <div className="px-8 py-10 flex flex-col items-center text-center bg-primary-900 text-white relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
-            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mb-4 border border-white/20 relative z-10">
-              <BookOpen className="w-8 h-8 text-primary-50" strokeWidth={1.5} />
-            </div>
-            <h1 className="font-arabic text-3xl font-bold tracking-wide relative z-10 mb-2">Kamus Asy-Syifaa</h1>
-            <p className="font-sans text-sm text-primary-200 tracking-wide opacity-90 relative z-10">
-              Silahkan Masuk Untuk Melanjutkan
-            </p>
-          </div>
-          
-          <div className="p-8 pb-10 flex flex-col items-center">
-            <p className="text-sm text-slate-600 leading-relaxed font-sans text-center mb-8">
-              Aplikasi ini terhubung langsung dengan Pangkalan Data Pesantren dan memerlukan otentikasi Google (akun Gemini).
-            </p>
-            
-            <button
-              onClick={loginWithGoogle}
-              className="w-full py-3.5 bg-white border-2 border-slate-200 text-slate-700 rounded-xl font-medium shadow-sm hover:bg-slate-50 transition-colors flex items-center justify-center gap-3"
-            >
-              <LogIn className="w-5 h-5 text-primary-600" />
-              Lanjutkan dengan Google
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen h-screen bg-slate-50 flex flex-col selection:bg-primary-200">
@@ -223,16 +135,6 @@ Arahan:
                   Dikembangkan oleh PT Rojo Bronto Lano
                 </p>
               </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={logout}
-                className="p-2 bg-white/5 hover:bg-white/10 rounded-full transition-colors text-primary-100 hover:text-white"
-                title="Keluar (Logout)"
-              >
-                <LogOut className="w-5 h-5" />
-              </button>
             </div>
           </div>
         </header>
@@ -306,26 +208,31 @@ Arahan:
             onSubmit={handleSend}
             className="flex flex-col gap-3 max-w-4xl mx-auto"
           >
-            <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {[
-                { id: "umum", label: "Umum" },
-                { id: "terjemahan", label: "Terjemahan" },
-                { id: "definisi", label: "Definisi" },
-                { id: "makna", label: "Makna" }
-              ].map((mode) => (
-                <button
-                  key={mode.id}
-                  type="button"
-                  onClick={() => setSearchMode(mode.id as any)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0 border ${
-                    searchMode === mode.id 
-                      ? "bg-primary-800 border-primary-800 text-white shadow-sm" 
-                      : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-                  }`}
-                >
-                  {mode.label}
-                </button>
-              ))}
+            <div className="flex justify-between items-center overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden w-full gap-4">
+              <div className="flex gap-2 shrink-0">
+                {[
+                  { id: "all", label: "Semua" },
+                  { id: "arab-indo", label: "Arab - Indo" },
+                  { id: "indo-arab", label: "Indo - Arab" },
+                  { id: "munawwir", label: "Kamus Munawwir" },
+                  { id: "arab-arab", label: "Mu'jam Arab" },
+                  { id: "lisanul-arab", label: "Lisanul Arab" },
+                  { id: "quran", label: "Al-Qur'an" }
+                ].map((mode) => (
+                  <button
+                    key={mode.id}
+                    type="button"
+                    onClick={() => setSearchMode(mode.id as any)}
+                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors border whitespace-nowrap ${
+                      searchMode === mode.id 
+                        ? "bg-primary-800 border-primary-800 text-white shadow-sm" 
+                        : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    {mode.label}
+                  </button>
+                ))}
+              </div>
             </div>
             
             <div className="relative flex items-end gap-3">
