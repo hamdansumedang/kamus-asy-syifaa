@@ -87,7 +87,6 @@ Sajikan secara terstruktur dan ringkas.`;
     setIsTyping(true);
 
     try {
-      console.log("Sending request to /api/chat...");
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
@@ -95,27 +94,21 @@ Sajikan secara terstruktur dan ringkas.`;
         },
         body: JSON.stringify({
           messages: messages.filter(m => m.role !== "system"),
-          promptMessage,
-          userText
+          promptMessage
         })
       });
 
-      const textResponse = await response.text();
-      console.log("Received response text (first 100 chars):", textResponse.substring(0, 100));
-
       let data;
       try {
-        data = JSON.parse(textResponse);
+        data = await response.json();
       } catch (err) {
-        console.error("JSON Parse Error:", err, "Raw response:", textResponse);
-        if (textResponse.includes("<!DOCTYPE html>")) {
-          throw new Error("Server mengembalikan halaman HTML. Ini biasanya berarti rute API tidak ditemukan atau server sedang memulai ulang.");
-        }
-        throw new Error("Respon server bukan format JSON yang valid.");
+        const text = await response.text();
+        console.error("Non-JSON response:", text);
+        throw new Error("Server mengembalikan respon yang tidak valid. Ini mungkin karena server timeout atau error saat mengolah data.");
       }
       
       if (!response.ok) {
-        throw new Error(data.error || `Server error (${response.status})`);
+        throw new Error(data.error || "Terjadi kesalahan pada server.");
       }
       
       setMessages((prev) => [...prev, { role: "model", text: data.text || "" }]);
