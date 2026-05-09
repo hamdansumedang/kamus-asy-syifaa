@@ -10,7 +10,7 @@ type Message = {
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [searchMode, setSearchMode] = useState<"all" | "arab-indo" | "indo-arab" | "munawwir" | "arab-arab" | "lisanul-arab" | "quran">("all");
+  const [searchMode, setSearchMode] = useState<"all" | "arab-indo" | "indo-arab" | "munawwir" | "arab-arab" | "lisanul-arab" | "quran" | "almufid">("all");
   const [isLoading, setIsLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export default function App() {
     setMessages([
       {
         role: "model",
-        text: "Assalamu'alaikum. Selamat datang di Kamus Asy-Syifaa.\n\nSaya adalah asisten AI yang siap membantu Anda mencari makna istilah dalam pangkalan data Pesantren Asy-Syifaa Wal Mahmuudiyyah. Apa yang ingin Anda cari hari ini?",
+        text: "Assalamu'alaikum. Selamat datang di Kamus Asy-Syifaa.\n\nSaya adalah asisten AI yang mencari di pangkalan data lengkap:\n1. **Kamus Arab - Indonesia** (154.644 kata)\n2. **Mu'jamul Arab** (29.803 mufrodat)\n3. **Kamus Almufid** (8.860 kata)\n4. **Kamus Al-Qur'an & Ghoribul Qur'an**\n5. **Kamus Munawwir & Lisanul Arab**\n\nPilih tab kategori atau gunakan **'Semua'** untuk mencari di seluruh pangkalan data. Apa yang ingin Anda cari hari ini?",
       },
     ]);
   }, []);
@@ -46,15 +46,7 @@ export default function App() {
     
     switch (searchMode) {
       case "all":
-        promptMessage = `Cari: "${userText}". Tolong tampilkan hasil dari SEMUA kamus berikut jika ada:
-1. Arab-Indo
-2. Indo-Arab
-3. Kamus Munawwir
-4. Mu'jam Arab
-5. Lisanul Arab
-6. Al-Qur'an
-
-Sajikan secara terstruktur dan ringkas.`;
+        promptMessage = `Cari di seluruh pangkalan data kamus (Arab-Indo, Indo-Arab, Munawwir, Mu'jam Arab, Lisanul Arab, Almufid, dan Al-Qur'an): "${userText}"`;
         displayMessage = `[Semua] ${userText}`;
         break;
       case "arab-indo":
@@ -81,6 +73,10 @@ Sajikan secara terstruktur dan ringkas.`;
         promptMessage = `Cari ayat Al-Qur'an terkait: "${userText}"`;
         displayMessage = `[Al-Qur'an] ${userText}`;
         break;
+      case "almufid":
+        promptMessage = `Cari di Kamus Almufid (kalimat & uslub): "${userText}"`;
+        displayMessage = `[Kamus Almufid] ${userText}`;
+        break;
     }
 
     setMessages((prev) => [...prev, { role: "user", text: displayMessage }]);
@@ -98,14 +94,7 @@ Sajikan secara terstruktur dan ringkas.`;
         })
       });
 
-      let data;
-      try {
-        data = await response.json();
-      } catch (err) {
-        const text = await response.text();
-        console.error("Non-JSON response:", text);
-        throw new Error("Server mengembalikan respon yang tidak valid. Ini mungkin karena server timeout atau error saat mengolah data.");
-      }
+      const data = await response.json();
       
       if (!response.ok) {
         throw new Error(data.error || "Terjadi kesalahan pada server.");
@@ -232,6 +221,7 @@ Sajikan secara terstruktur dan ringkas.`;
                   { id: "munawwir", label: "Kamus Munawwir" },
                   { id: "arab-arab", label: "Mu'jam Arab" },
                   { id: "lisanul-arab", label: "Lisanul Arab" },
+                  { id: "almufid", label: "Kamus Almufid" },
                   { id: "quran", label: "Al-Qur'an" }
                 ].map((mode) => (
                   <button
