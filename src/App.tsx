@@ -1,11 +1,15 @@
 import { BookOpen, Loader2, Send, AlertCircle } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import { GoogleGenAI } from "@google/genai";
 
 type Message = {
   role: "user" | "model" | "system";
   text: string;
 };
+
+// Initialize Gemini
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -87,39 +91,49 @@ Sajikan secara terstruktur dan ringkas.`;
     setIsTyping(true);
 
     try {
-      console.log("Sending request to ./api/chat...");
-      const response = await fetch("./api/chat", {
+      // 1. Get RAG data from server
+      const searchResponse = await fetch("/api/search", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          messages: messages.filter(m => m.role !== "system"),
-          promptMessage
-        })
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: userText })
       });
-
-      let data;
-      const textResponse = await response.text();
-      console.log("Received response text:", textResponse.substring(0, 100));
-
-      try {
-        data = JSON.parse(textResponse);
-      } catch (err) {
-        console.error("JSON Parse Error:", err, "Response was:", textResponse);
-        throw new Error("Respon server tidak valid (bukan JSON). Jika ini terjadi di Shared App, pastikan server backend berjalan dengan benar.");
-      }
       
-      if (!response.ok) {
-        throw new Error(data.error || "Terjadi kesalahan pada server.");
+      let matches = [];
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        matches = searchData.matches || [];
       }
+
+      // 2. Call Gemini
+      const systemInstruction = `Anda adalah AI Kamus Asy-Syifaa untuk Pondok Pesantren Asy-Syifaa Wal Mahmuudiyyah.
+Tugas Anda adalah membantu pengguna menerjemahkan atau mencari makna kata Arab-Indonesia.
+
+Pangkalan Data Terkait:
+${JSON.stringify(matches)}
+
+Arahan:
+1. JAWABLAH DENGAN SANGAT SINGKAT. Langsung ke inti terjemahan atau makna.
+2. Gunakan data pangkalan di atas jika tersedia. Jika tidak ada data yang cocok, gunakan pengetahuan luas Anda tentang bahasa Arab.
+3. Selalu ramah dan sampaikan pesan dalam bahasa Indonesia yang natural.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          { role: "user", parts: [{ text: `System Instruction: ${systemInstruction}` }] },
+          ...messages.filter(m => m.role !== "system").map(m => ({
+            role: m.role === "model" ? ("model" as const) : ("user" as const),
+            parts: [{ text: m.text }]
+          })).slice(-6),
+          { role: "user", parts: [{ text: promptMessage }] }
+        ]
+      });
       
-      setMessages((prev) => [...prev, { role: "model", text: data.text || "" }]);
+      setMessages((prev) => [...prev, { role: "model", text: response.text || "" }]);
     } catch (err: any) {
       console.error("Chat Error:", err);
       setMessages((prev) => [
         ...prev,
-        { role: "system", text: `Maaf, terjadi kesalahan: ${err.message || "Gagal menghubungi server."}` },
+        { role: "system", text: `Maaf, terjadi kesalahan: ${err.message || "Gagal menghubungi AI."}` },
       ]);
     } finally {
       setIsTyping(false);

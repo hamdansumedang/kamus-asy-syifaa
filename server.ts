@@ -1,22 +1,9 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
-import OpenAI from "openai";
 import path from "path";
 import Papa from "papaparse";
 
 const SHEET_ID = "1Iu2-VyE2aQqG1NbKNm35auQm7K_v7W3D";
-
-// Pangkalan data terbagi menjadi beberapa sheet
-const SHEETS = [
-  "almufid",
-  "arab_indo",
-  "arab_indo2",
-  "arabic_arabic2",
-  "ghoribulquran",
-  "mujamul_ghoni",
-  "mujamul_muashiroh",
-  "quran"
-];
 
 let kamusData: any[] = [];
 let isDataLoading = false;
@@ -28,8 +15,6 @@ async function loadKamusData() {
   console.log("Memulai pengunduhan data kamus...");
   
   try {
-    // Kita coba ambil sheet utama (arab_indo) terlebih dahulu sebagai sampel utama agar tidak OOM
-    // Jika memori cukup, kita bisa ambil yang lain. Untuk sekarang fokus ke yang paling relevan.
     const targetSheet = "arab_indo";
     const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${targetSheet}`;
     
@@ -54,7 +39,7 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Ping & Health
+  // Health check
   app.get("/api/health", (req, res) => {
     res.json({ 
       status: "ok", 
@@ -63,64 +48,36 @@ async function startServer() {
     });
   });
 
-  app.all("/api/ping", (req, res) => res.send("pong"));
-
-  // AI Chat Endpoint
-  app.post("/api/chat", async (req, res) => {
+  // Search API for RAG
+  app.post("/api/search", async (req, res) => {
     try {
-      const { messages, promptMessage } = req.body;
+      const { keyword } = req.body;
       
       if (!kamusData.length && !isDataLoading) {
         loadKamusData().catch(console.error);
       }
 
-      const openrouterApiKey = process.env.OPENROUTER_API_KEY || "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";
-      const openai = new OpenAI({
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKey: openrouterApiKey,
-      });
-
-      // RAG sederhana
-      let keyword = promptMessage.replace(/["']/g, "").toLowerCase().trim();
       let matches: any[] = [];
+      const cleanKeyword = (keyword || "").replace(/["']/g, "").toLowerCase().trim();
       
-      if (keyword.length > 1) {
+      if (cleanKeyword.length > 1) {
         for (const row of kamusData) {
           const rowStr = JSON.stringify(row).toLowerCase();
-          if (rowStr.includes(keyword)) {
+          if (rowStr.includes(cleanKeyword)) {
              matches.push(row);
-             if (matches.length >= 20) break;
+             if (matches.length >= 30) break;
           }
         }
       }
-
-      const systemInstruction = `Anda adalah AI Kamus Asy-Syifaa.
-Bantu pengguna menerjemahkan atau mencari makna dari pangkalan data berikut (Khusus: ${keyword}):
-${JSON.stringify(matches)}
-
-Jawablah dengan SANGAT SINGKAT. Langsung ke inti makna.
-Gunakan data di atas jika tersedia. Jika tidak, gunakan pengetahuan bahasa Arab Anda sendiri.`;
-
-      const completion = await openai.chat.completions.create({
-        model: "openai/gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemInstruction },
-          ...messages.map((m: any) => ({
-            role: m.role === "model" ? "assistant" : "user",
-            content: m.text
-          })).slice(-10), // Ambil 10 pesan terakhir saja
-          { role: "user", content: promptMessage }
-        ],
-      });
-
-      res.json({ text: completion.choices[0]?.message?.content || "" });
+      
+      res.json({ matches });
     } catch (error: any) {
-      console.error("Endpoint Error:", error);
+      console.error("Search Error:", error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Vite
+  // Serve static files in production or proxy in dev
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
